@@ -2,7 +2,23 @@ import tkinter as tk  # PEP 8 recommends avoiding `import *`.
 from tkinter import font
 import tkinter.messagebox
 from time import gmtime, strftime
-import random, pickle, os
+import random, pickle, os, sys
+
+class Plant():
+    tolerance = 0.1
+    def __init__(self, name, pH_min, pH_max, ec_min, ec_max,cf_min, 
+                 cf_max, ppm700_min, ppm700_max, ppm500_min, ppm500_max):
+        self.name = name
+        self.pH_min = pH_min
+        self.pH_max = pH_max
+        self.ec_min = ec_min
+        self.ec_max = ec_max
+        self.cf_min = cf_min
+        self.cf_max = cf_max
+        self.ppm700_min = ppm700_min
+        self.ppm700_max = ppm700_max
+        self.ppm500_min = ppm500_min
+        self.ppm500_max = ppm500_max
 
 class Fullscreen_Window:
 
@@ -12,6 +28,7 @@ class Fullscreen_Window:
         self.frame = tk.Frame(self.tk)
         self.frame.pack()
         self.state = False
+        self.tk.attributes("-fullscreen", self.state)
         self.tk.bind("<F11>", self.toggle_fullscreen)
         self.tk.bind("<Escape>", self.end_fullscreen)
 
@@ -77,7 +94,8 @@ class PopupWindow(tk.Toplevel):
 
 class CanvasButton:
 
-    def __init__(self, canvas, x, y, display, command, anchor='nw', btn_num=None):
+    def __init__(self, canvas, x, y, display, command, anchor='nw', 
+                 btn_num=None, state=tk.NORMAL):
         self.canvas = canvas
         try:
             self.display = tk.PhotoImage(file=display)
@@ -94,7 +112,9 @@ class CanvasButton:
             self.button.configure(command=lambda:(command(btn_num)))
         else:
             self.button.configure(command=command)
-        self.canvas_btn_obj = canvas.create_window(x, y, anchor=anchor, window=self.button)
+        self.canvas_btn_obj = canvas.create_window(x, y, anchor=anchor, 
+                                                   window=self.button)
+        self.set_state(state)
 
     def set_state(self, state):
         self.canvas.itemconfigure(self.canvas_btn_obj, state=state)
@@ -106,7 +126,8 @@ class CanvasImageButton:
     """
     flash_delay = 100  # Milliseconds.
 
-    def __init__(self, canvas, x, y, image_path, command, anchor='nw', btn_num=None, state=tk.NORMAL):
+    def __init__(self, canvas, x, y, image_path, command, anchor='nw', 
+                 btn_num=None, state=tk.NORMAL):
         self.canvas = canvas
         self.btn_image = tk.PhotoImage(file=image_path)
         self.canvas_btn_img_obj = canvas.create_image(x, y, anchor=anchor, state=state,
@@ -119,6 +140,7 @@ class CanvasImageButton:
             #                 lambda event: (self.flash(), command()))
             canvas.tag_bind(self.canvas_btn_img_obj, "<ButtonRelease-1>",
                             lambda event: (command()))
+        self.set_state(state)
     def flash(self):
         self.set_state(tk.HIDDEN)
         self.canvas.after(self.flash_delay, self.set_state, tk.NORMAL)
@@ -138,13 +160,15 @@ class CanvasImage:
         self.img = tk.PhotoImage(file=image_path)
         self.canvas_img_obj = canvas.create_image(x, y, anchor=anchor, state=state,
                                                   image=self.img)
+        self.set_state(state)
     def set_state(self, state):
         self.canvas.itemconfigure(self.canvas_img_obj, state=state)
 
 class CanvasText:
     def __init__(self, canvas, x, y, font, align='nw', text='', state=tk.NORMAL):
         self.canvas = canvas
-        self.canvas_txt_obj = canvas.create_text(x, y, anchor=align, font=font, text=text)
+        self.canvas_txt_obj = canvas.create_text(x, y, anchor=align, 
+                                                 font=font, text=text)
         self.bbox = self.canvas.bbox(self.canvas_txt_obj)
 
     def update_text(self, text):
@@ -166,34 +190,207 @@ class CanvasFrame:
         self.root_canvas = canvas
         self.frame_height = bgr_height-y
         self.frame_width = bgr_width-x
-        self.F = tk.Frame(canvas, bg='', height=self.frame_height, width=self.frame_width)
-        self.canvas_frame_obj = canvas.create_window(x, y, anchor='nw', state=state, window=self.F)
-        self.canvas = tk.Canvas(self.F, bg="white", height=self.frame_height, width=self.frame_width, bd=0, highlightthickness=0, relief="ridge")
+        self.F = tk.Frame(canvas, bg='', height=self.frame_height, 
+                          width=self.frame_width)
+        self.canvas_frame_obj = canvas.create_window(x, y, anchor='nw', 
+                                                     state=state, window=self.F)
+        self.canvas = tk.Canvas(self.F, bg="white", height=self.frame_height, 
+                                width=self.frame_width, bd=0, highlightthickness=0, 
+                                relief="ridge")
         self.canvas.place(x=0,y=0)
-        self.canvas.create_image(self.frame_width, self.frame_height, anchor='se', image=background_img)
+        self.canvas.create_image(self.frame_width, self.frame_height, 
+                                 anchor='se', image=background_img)
+        self.set_state(state)
     def set_state(self, state):
         self.root_canvas.itemconfigure(self.canvas_frame_obj, state=state)
     def clear(self):
         self.canvas.delete("all")
-        self.canvas.create_image(self.frame_width, self.frame_height, anchor='se', image=background_img)
+        self.canvas.create_image(self.frame_width, self.frame_height, 
+                                 anchor='se', image=background_img)
 
-class ActivePlant:
-    plants = ["Lettuce", "Basil", "Strawberries"]
-    def __init__(self):
-        self.name = "None"
-        self.start_date = ""
+class ActivePlant(Plant):
+    available_plants = ["Lettuce", "Basil", "Strawberries"]
+    def __init__(self, name='None', pH_min=0, pH_max=0, ec_min=0, ec_max=0,cf_min=0, 
+                 cf_max=0, ppm700_min=0, ppm700_max=0, ppm500_min=0, ppm500_max=0):
+        self.name = name
+        self.pH_min = pH_min
+        self.pH_max = pH_max
+        self.ec_min = ec_min
+        self.ec_max = ec_max
+        self.cf_min = cf_min
+        self.cf_max = cf_max
+        self.ppm700_min = ppm700_min
+        self.ppm700_max = ppm700_max
+        self.ppm500_min = ppm500_min
+        self.ppm500_max = ppm500_max
         self.harvest_date = "--/--/----"
         self.running = False
+        self.error = False
+        self.error_msg = "Error"
+    def load_plant(self, index):
+        self.name = self.available_plants[index]
     def set_running(self, value):
         self.running = value
-    def load_plant(self, index):
-        self.name = self.plants[index]
     def reset(self):
         self.name = "None"
-        self.start_date = ""
-        self.harvest_date = "--/--/----"
         self.running = False
-        
+        self.harvest_date = "--/--/----"
+
+class Home:
+    def __init__(self, display, led_paths, ctl_btn_paths):
+        self.display = display
+        self.led_paths = led_paths
+        self.ctl_btn_paths = ctl_btn_paths
+        self.digital_clock = CanvasText(self.display.canvas, 310, -40, h[0],'n')
+        self.weekday = CanvasText(self.display.canvas, 80, 0, h[3], 'n')
+        self.month = CanvasText(self.display.canvas, 0, 37, h[4])
+        self.day = CanvasText(self.display.canvas, 80, 25, h[1], 'n')
+        self.year = CanvasText(self.display.canvas, 0, 95, h[4])
+        CanvasText(self.display.canvas, 670, 0, h[4], 'ne', "Current Plant:")
+        self.plant_name = CanvasText(self.display.canvas, 670, 25, h[2],
+                                     'ne', activePlant.name)
+        CanvasText(self.display.canvas, 20, 155, h[2], 'w', "Estimated Harvest Date:")
+        self.harvest_date = CanvasText(self.display.canvas, 400, 205, h[2], 
+                                       'w', activePlant.harvest_date)
+        CanvasText(self.display.canvas, 20, 260, h[3], 'nw', "Status:")
+        self.leds = []
+        for i in range(0, len(self.led_paths)):
+            self.leds.append(CanvasImage(self.display.canvas, 60, 300, 
+                                         self.led_paths[i], 'w', tk.HIDDEN))
+        self.leds[0].set_state(tk.NORMAL)
+        self.status_msg = CanvasText(self.display.canvas, 200, 300, h[3], 
+                                     "w", "No Program Running")
+        self.controls = []
+        self.ctl_cmds = (start_program, launch_popup)
+        for i in range(0, len(ctl_btn_paths)):
+            self.controls.append(CanvasButton(self.display.canvas, 600, 300, 
+                                              self.ctl_btn_paths[i], self.ctl_cmds[i],
+                                              'center', None, tk.HIDDEN))
+        self.controls[0].set_state(tk.NORMAL)
+        self.update_home()
+
+    def update_time(self):
+        string_time = strftime('%H:%M ')
+        self.digital_clock.update_text(string_time)
+        str_weekday = strftime('%A')
+        padded = str_weekday.center(8)
+        self.weekday.update_text(padded)
+        str_month = strftime('%m/ ')
+        self.month.update_text(str_month)
+        self.month.move_text_lr(self.weekday.bbox[0])
+        str_day = strftime('%d')
+        self.day.update_text(str_day)
+        str_year = strftime('/%y')
+        self.year.update_text(str_year)
+        self.year.move_text_lr(self.weekday.bbox[2]-self.year.bbox[2]+self.year.bbox[0]-3)
+     
+    def update_home(self):
+        self.update_time()
+        if activePlant.running:
+            self.controls[1].set_state(tk.NORMAL)
+        else:
+            self.controls[0].set_state(tk.NORMAL)
+    
+        self.display.canvas.after(1000, self.update_home)
+
+    def update_status(self, index, msg):
+        for control in self.controls:
+            control.set_state(tk.HIDDEN)
+        for led in self.leds:
+            led.set_state(tk.HIDDEN)
+        if activePlant.error:
+            self.leds[2].set_state(tk.NORMAL)
+            self.status_msg.update_text(activePlant.error_msg)
+        else:
+            self.leds[index].set_state(tk.NORMAL)
+            self.status_msg.update_text(msg)
+        self.controls[index].set_state(tk.NORMAL)
+
+class Plants:
+    def __init__(self, display, plant_btn_paths, num_col=4, num_row=2): 
+        self.display = display
+        self.plant_btn_paths = plant_btn_paths
+        self.num_col = num_col
+        self.num_row = num_row
+        self.page = 0
+        self.plant_buttons = []
+        for i in range (self.num_row):
+            for j in range (self.num_col):
+                index = i * num_col + j + self.page * self.num_col * self.num_row
+                print(index)
+                if index < len(activePlant.available_plants):
+                    self.plant_buttons.append(CanvasButton(self.display.canvas, 
+                                                           j*175+80, i*150, 
+                                                           self.plant_btn_paths[index],
+                                                           load_plant, 'n', index))
+                    CanvasText(self.display.canvas, j*175+80, i*150+110, 
+                               h[3], 'n', activePlant.available_plants[index])
+                else:
+                    break
+
+class Credits:
+    def __init__(self, display, students, second_line, instructors, advisors, sponsors, num_col = 3):
+        self.display = display
+        self.num_col = num_col
+        self.students = students
+        self.second_line = second_line
+        self.instructors = instructors
+        self.advisors = advisors
+        self.sponsors = sponsors
+        self.generate_credits()
+    def generate_credits(self):
+        students_formatted = self.students.copy()
+        random.shuffle(students_formatted)
+        CanvasText(self.display.canvas, 350, 0, h[3], 'n', "HSA Engineering 2026 Graduating Class")
+        while (len(students_formatted)+len(self.second_line)) % self.num_col != 0:
+            students_formatted.append("")
+        num_row = (len(students_formatted)+len(second_line))//self.num_col
+        for i in range(self.num_col):
+            j = 0
+            while (j < num_row):
+                pos = j+i*num_row
+                student = students_formatted[pos]
+                if pos % num_row == num_row - 1:
+                    if student in self.second_line.keys():
+                        print("Moving")
+                        x = 1
+                        while students_formatted[pos+x] in self.second_line.keys():
+                            x += 1
+                        students_formatted[pos], students_formatted[pos+x] = students_formatted[pos+x], students_formatted[pos]
+                        student = students_formatted[pos]
+                if student != "":
+                    txt = "\u2022 " + student
+                else:
+                    txt = student
+                CanvasText(self.display.canvas, 30+i*210, 30*j+40, h[3], 'nw', txt)
+                if student in self.second_line.keys():
+                    j += 1
+                    students_formatted.insert(pos+1, self.second_line[student])
+                    txt = "   " + students_formatted[pos+1]
+                    CanvasText(self.display.canvas, 30+i*210, 30*j+40, h[3], 'nw', txt)
+                j += 1
+    
+        txt = self.gen_str("Instructor", self.instructors)
+        CanvasText(self.display.canvas, 30, 30*int(len(students_formatted)/self.num_col+1)+20, h[3], 'nw', txt)
+        txt = self.gen_str("Advisor", self.advisors)
+        CanvasText(self.display.canvas, 30, 30*int(len(students_formatted)/self.num_col+2)+20, h[3], 'nw', txt)
+        txt = self.gen_str("Special Thank", self.sponsors)
+        thanks = CanvasText(self.display.canvas, 30, 30*int(len(students_formatted)/self.num_col+3)+40, h[4], 'nw', txt)
+        thanks.update_width(600)
+        del students_formatted
+    
+    def gen_str(self, start, elements):
+        txt = start
+        num_elements = len(elements)
+        if num_elements > 1:
+            txt = txt + "s: "
+        else:
+            txt = txt + ": "
+        for i in range(num_elements):
+            txt = txt + elements[i]
+            if i < num_elements - 1:
+                txt = txt + ", "
+        return txt       
 
 BGR_IMG_PATH = "assets/bg.png"
 NAV_BTN_PATHS = ("assets/button-home.png", "assets/button-plant.png", 
@@ -215,16 +412,7 @@ def nav_clicked(btn):
     displays[btn].set_state(tk.NORMAL)
     if btn == 3:
         displays[3].clear()
-        generate_credits()
-
-def update_status(index, msg):
-    for control in controls:
-        control.set_state(tk.HIDDEN)
-    for led in leds:
-        led.set_state(tk.HIDDEN)
-    controls[index].set_state(tk.NORMAL)
-    leds[index].set_state(tk.NORMAL)
-    status_msg.update_text(msg)
+        credits.generate_credits()
 
 def launch_popup():
     for nav_btn in nav_btns:
@@ -235,12 +423,12 @@ def launch_popup():
 def abort_program():
     os.remove(fname)
     activePlant.reset()
-    plant_name.update_text(activePlant.name)
-    update_status(0,"No Program Running")
+    home.plant_name.update_text(activePlant.name)
+    home.update_status(0,"No Program Running")
 
 def pause_program():
     activePlant.set_running(False)
-    update_status(0,"Program Paused")
+    home.update_status(0,"Program Paused")
 
 def start_program():
     if activePlant.name == "None":
@@ -248,69 +436,11 @@ def start_program():
                                 message="You must select a plant from the Plants tab")
     else:
         activePlant.set_running(True)
-        update_status(1,"All Systems Normal")
-
-def update_time():
-    string_time = strftime('%H:%M ')
-    digital_clock.update_text(string_time)
-    str_weekday = strftime('%A')
-    padded = str_weekday.center(8)
-    weekday.update_text(padded)
-    str_month = strftime('%m/ ')
-    month.update_text(str_month)
-    month.move_text_lr(weekday.bbox[0])
-    str_day = strftime('%d')
-    day.update_text(str_day)
-    str_year = strftime('/%y')
-    year.update_text(str_year)
-    year.move_text_lr(weekday.bbox[2]-year.bbox[2]+year.bbox[0]-5)
- 
-def update_home():
-    update_time()
-    if activePlant.running:
-        controls[1].set_state(tk.NORMAL)
-    else:
-        controls[0].set_state(tk.NORMAL)
-
-    displays[0].canvas.after(1000, update_home)
-
-def generate_credits():
-    random.shuffle(students)
-    CanvasText(displays[3].canvas, 350, 0, h[3], 'n', "HSA Engineering 2026 Graduating Class")
-    num_col = 3
-    while len(students) % num_col != 0:
-        students.append("")
-    for i in range(num_col):
-        num_row = int(len(students)/num_col)
-        for j in range(num_row):
-            txt = students[j+i*num_row]
-            if txt != "":
-                txt = "\u2022 " + txt
-            CanvasText(displays[3].canvas, 30+i*200, 35*j+40, h[3], 'nw', txt)
-    txt = gen_str("Instructor", instructors)
-    CanvasText(displays[3].canvas, 30, 35*int(len(students)/num_col+1)+20, h[3], 'nw', txt)
-    txt = gen_str("Advisor", advisors)
-    CanvasText(displays[3].canvas, 30, 35*int(len(students)/num_col+2)+20, h[3], 'nw', txt)
-    txt = gen_str("Special Thank", sponsors)
-    thanks = CanvasText(displays[3].canvas, 30, 35*int(len(students)/num_col+3)+40, h[4], 'nw', txt)
-    thanks.update_width(600)
-
-def gen_str(start, elements):
-    txt = start
-    num_elements = len(elements)
-    if num_elements > 1:
-        txt = txt + "s: "
-    else:
-        txt = txt + ": "
-    for i in range(num_elements):
-        txt = txt + elements[i]
-        if i < num_elements - 1:
-            txt = txt + ", "
-    return txt
+        home.update_status(1,"All Systems Normal")
 
 def load_plant(num):
     activePlant.load_plant(num)
-    plant_name.update_text(activePlant.name)
+    home.plant_name.update_text(activePlant.name)
     with open(fname, "wb") as fout:
         pickle.dump(activePlant, fout)
 
@@ -321,7 +451,15 @@ try:
 except FileNotFoundError:
     activePlant = ActivePlant()
 #activePlant = ActivePlant()
-
+try:
+    with open('plant_db.pkl', 'rb') as fin:
+        plantDB = pickle.load(fin)
+    for plant in plantDB:
+        print(plant.name)
+except:
+    print("Plant Database failed to load!!")
+    sys.exit("No Plant Database")
+ 
 # root = tk.Tk()
 root = Fullscreen_Window()
 
@@ -352,44 +490,21 @@ canvas_icon = CanvasImage(bg_canvas, 780, 15, HSA_ICON_PATH, 'ne')
 CanvasText(bg_canvas, 400, 0, h[1], 'n', "Hydro-Smart")
 
 # Home Display
-digital_clock = CanvasText(displays[0].canvas, 310, -40, h[0],'n')
-weekday = CanvasText(displays[0].canvas, 80, 0, h[3], 'n')
-month = CanvasText(displays[0].canvas, 0, 37, h[4])
-day = CanvasText(displays[0].canvas, 80, 25, h[1], 'n')
-year = CanvasText(displays[0].canvas, 0, 95, h[4])
-CanvasText(displays[0].canvas, 670, 0, h[4], 'ne', "Current Plant:")
-plant_name = CanvasText(displays[0].canvas, 670, 25, h[2],  'ne', activePlant.name)
-CanvasText(displays[0].canvas, 20, 155, h[2], 'w', "Estimated Harvest Date:")
-harvest_date = CanvasText(displays[0].canvas, 400, 205, h[2], 'w', activePlant.harvest_date)
-CanvasText(displays[0].canvas, 20, 260, h[3], 'nw', "Status:")
-leds = []
-for i in range(0, len(LED_PATHS)):
-    leds.append(CanvasImage(displays[0].canvas, 60, 300, LED_PATHS[i], 'w', tk.HIDDEN))
-leds[0].set_state(tk.NORMAL)
-status_msg = CanvasText(displays[0].canvas, 200, 300, h[3], "w", "No Program Running")
-controls = []
-ctl_cmds = (start_program, launch_popup)
-for i in range(0, len(CTL_BTN_PATHS)):
-    controls.append(CanvasButton(displays[0].canvas, 600, 300, CTL_BTN_PATHS[i], ctl_cmds[i], 'center'))
-pause_program()
-update_home()
+home = Home(displays[0], LED_PATHS, CTL_BTN_PATHS)
 
 # Plants Display
-# canvas_btn_plant2 = CanvasImageButton(displays[1].canvas, 0, 0, NAV_BTN_PATHS[1], btn_clicked)
-max_btns = 4
-plant_buttons = []
-for i in range(len(activePlant.plants)):
-    plant_buttons.append(CanvasButton(displays[1].canvas, (i%max_btns)*175+80, int(i/max_btns)*150, PLANT_BTN_PATHS[i], load_plant, 'n', i))
-    # plant_buttons.append(CanvasButton(displays[1].canvas, (i%max_btns)*175, int(i/max_btns) * 150, "Click Me", btn_clicked))
-    CanvasText(displays[1].canvas, (i%max_btns)*175+80, int(i/max_btns)*150+110, h[3], 'n', activePlant.plants[i])
+plants = Plants(displays[1], PLANT_BTN_PATHS)
+
 # Stats Display
 
 # Credits Display
-students = ["Hajr Abdullah", "Amelia Allison", "Foday Lamboi", "Cedrick Abotchi", "Brandon Jimenez-Martinez", "Caleb Kolie", "Abdul Bayoh", "Ryan Shoults", "Abdimalik Mire", "Zack Abdullahi", "Salmaan Mosa", "Mohammed Ali"]
+students = ["Hajr Abdullah", "Amelia Allison", "Foday Lamboi", "Brandon Jimenez-", "Cedrick Abotchi", "Caleb Kolie", "Abdul Bayoh", "Ryan Shoults", "Abdimalik Mire", "Zack Abdullahi", "Salmaan Mosa", "Mohammed Ali"]
+second_line = {"Brandon Jimenez-":"Martinez"}
 instructors = ["Dorma Flemister"]
-advisors = ["Savas Kaya", "John Hribar"]
+advisors = ["John Hribar", "Dr. Savas Kaya"]
 sponsors = ["The Ohio State University", "Ohio University", "SenseICs", "Smarty Pants Consulting", "Horizon Science Academy"]
-generate_credits()
+credits = Credits(displays[3], students, second_line, instructors, advisors, sponsors)
+
 # Start from Home
 displays[0].set_state(tk.NORMAL)
 
