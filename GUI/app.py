@@ -7,7 +7,8 @@ import random, pickle, os, sys
 class Plant():
     tolerance = 0.1
     def __init__(self, name, pH_min, pH_max, ec_min, ec_max,cf_min, 
-                 cf_max, ppm700_min, ppm700_max, ppm500_min, ppm500_max):
+                 cf_max, ppm700_min, ppm700_max, ppm500_min, ppm500_max,
+                 sun_min, sun_max, germ_days, harvest_days, desc):
         self.name = name
         self.pH_min = pH_min
         self.pH_max = pH_max
@@ -19,6 +20,11 @@ class Plant():
         self.ppm700_max = ppm700_max
         self.ppm500_min = ppm500_min
         self.ppm500_max = ppm500_max
+        self.sun_min = sun_min
+        self.sun_max = sun_max
+        self.germ_days = germ_days
+        self.harvest_days = harvest_days
+        self.desc = desc
 
 class ActivePlant(Plant):
     available_plants = ["Lettuce", "Basil", "Strawberries"]
@@ -26,7 +32,9 @@ class ActivePlant(Plant):
     def __init__(self, plant):
         super().__init__(plant.name, plant.pH_min, plant.pH_max, plant.ec_min, 
                          plant.ec_max, plant.cf_min, plant.cf_max, plant.ppm700_min, 
-                         plant.ppm700_max, plant.ppm500_min, plant.ppm500_max)
+                         plant.ppm700_max, plant.ppm500_min, plant.ppm500_max, 
+                         plant.sun_min, plant.sun_max, plant.germ_days,
+                         plant.harvest_days, plant.desc)
         self.harvest_date = "--/--/----"
         self.running = False
         self.error = False
@@ -208,6 +216,9 @@ class CanvasText:
     def move_text_lr(self, x):
         self.canvas.moveto(self.canvas_txt_obj, x, self.bbox[1])
 
+    def align_text(self, alignment):
+        self.canvas.itemconfigure(self.canvas_txt_obj, justify=alignment)
+
     def update_width(self, width):
         self.canvas.itemconfigure(self.canvas_txt_obj, width=width)
         # self.bbox = self.canvas.bbox(self.canvas_txt_obj)
@@ -242,38 +253,36 @@ class HomeScreen:
     def __init__(self, display, led_paths, ctl_btn_paths, 
                  start_cmd, popup_cmd, activePlant, h):
         self.h = h
-        self.activePlant = activePlant
         self.display = display
         self.led_paths = led_paths
         self.ctl_btn_paths = ctl_btn_paths
         self.digital_clock = CanvasText(self.display.canvas, 310, -40, self.h[0],'n')
         self.weekday = CanvasText(self.display.canvas, 80, 0, self.h[3], 'n')
         self.month = CanvasText(self.display.canvas, 0, 37, self.h[4])
-        self.day = CanvasText(self.display.canvas, 80, 25, self.h[1], 'n')
-        self.year = CanvasText(self.display.canvas, 0, 95, self.h[4])
+        self.day = CanvasText(self.display.canvas, 80, 35, self.h[2], 'n')
+        self.year = CanvasText(self.display.canvas, 0, 77, self.h[4])
         CanvasText(self.display.canvas, 670, 0, self.h[4], 'ne', "Current Plant:")
         self.plant_name = CanvasText(self.display.canvas, 670, 25, self.h[2],
-                                     'ne', self.activePlant.name)
+                                     'ne', activePlant.name)
         CanvasText(self.display.canvas, 20, 155, self.h[2], 'w', 
                    "Estimated Harvest Date:")
         self.harvest_date = CanvasText(self.display.canvas, 400, 205, self.h[2], 
-                                       'w', self.activePlant.harvest_date)
+                                       'w', activePlant.harvest_date)
         CanvasText(self.display.canvas, 20, 260, self.h[3], 'nw', "Status:")
         self.leds = []
         for i in range(0, len(self.led_paths)):
             self.leds.append(CanvasImage(self.display.canvas, 60, 300, 
                                          self.led_paths[i], 'w', tk.HIDDEN))
-        self.leds[0].set_state(tk.NORMAL)
+        self.status_msgs = ("No Program Running", "All Systems Normal")
         self.status_msg = CanvasText(self.display.canvas, 200, 300, self.h[3], 
-                                     "w", "No Program Running")
+                                     "w", "")
         self.controls = []
         self.ctl_cmds = (start_cmd, popup_cmd)
         for i in range(0, len(ctl_btn_paths)):
             self.controls.append(CanvasButton(self.display.canvas, 600, 300, 
                                               self.ctl_btn_paths[i], self.ctl_cmds[i],
                                               'center', None, tk.HIDDEN))
-        self.controls[0].set_state(tk.NORMAL)
-        self.update_home()
+        self.update_plant(activePlant)
 
     def update_time(self):
         string_time = strftime('%H:%M ')
@@ -293,25 +302,35 @@ class HomeScreen:
      
     def update_home(self):
         self.update_time()
-        if self.activePlant.running:
-            self.controls[1].set_state(tk.NORMAL)
-        else:
-            self.controls[0].set_state(tk.NORMAL)
-    
+        if self.update_controls:
+            self.update_controls = False
+            for control in self.controls:
+                control.set_state(tk.HIDDEN)
+            for led in self.leds:
+                led.set_state(tk.HIDDEN)
+            if self.activePlant.error:
+                self.leds[2].set_state(tk.NORMAL)
+                self.status_msg.update_text(self.activePlant.error_msg)
+            elif self.activePlant.running:
+                print("Running")
+                self.controls[1].set_state(tk.NORMAL)
+                self.leds[1].set_state(tk.NORMAL)
+                self.status_msg.update_text("All Systems Normal")
+            else:
+                self.controls[0].set_state(tk.NORMAL)
+                self.leds[0].set_state(tk.NORMAL)
+                if self.activePlant.name == "None":
+                    self.status_msg.update_text("No Program Running")
+                else:
+                    self.status_msg.update_text("Program Paused")
+        # lambda:(command(btn_num))
         self.display.canvas.after(1000, self.update_home)
 
-    def update_status(self, index, msg):
-        for control in self.controls:
-            control.set_state(tk.HIDDEN)
-        for led in self.leds:
-            led.set_state(tk.HIDDEN)
-        if self.activePlant.error:
-            self.leds[2].set_state(tk.NORMAL)
-            self.status_msg.update_text(self.activePlant.error_msg)
-        else:
-            self.leds[index].set_state(tk.NORMAL)
-            self.status_msg.update_text(msg)
-        self.controls[index].set_state(tk.NORMAL)
+    def update_plant(self, activePlant):
+        self.update_controls = True
+        self.activePlant = activePlant
+        self.plant_name.update_text(self.activePlant.name)
+        self.update_home()
 
 class PlantsScreen:
     def __init__(self, display, plant_btn_paths, plant_img_paths, plant_load_cmd, 
@@ -375,14 +394,26 @@ class PlantsScreen:
         self.sel_plant = plantDB[self.activePlant.available_indices[plant_num]]
         self.plant_portrait = CanvasImage(self.display.canvas, 0, 0, 
                                           self.plant_img_paths[plant_num], 'nw')
-        self.plant_name = CanvasText(self.display.canvas, 500, 0, self.h[2],
+        self.plant_name = CanvasText(self.display.canvas, 500, 0, self.h[3],
                                      'n', self.sel_plant.name)
-        CanvasText(self.display.canvas, 100, 220, self.h[3], 'n', 'TDS')
+        self.plant_desc = CanvasText(self.display.canvas, 470, 35, self.h[4],
+                                     'n', self.sel_plant.desc)
+        self.plant_desc.update_width(320)
         tds_str = str(self.sel_plant.ppm700_min) + "-" + str(self.sel_plant.ppm700_max)
-        CanvasText(self.display.canvas, 100, 270, "TkHeadingFont", 'n', tds_str)
-        CanvasText(self.display.canvas, 200, 220, self.h[3], 'n', 'pH')
-        CanvasText(self.display.canvas, 300, 220, self.h[3], 'n', 'Sunlight')
-        CanvasText(self.display.canvas, 400, 220, self.h[3], 'n', 'Est. Time')
+        CanvasText(self.display.canvas, 60, 220, self.h[3], 'n', 'TDS')
+        CanvasText(self.display.canvas, 60, 260, "TkHeadingFont", 'n', tds_str)
+        CanvasText(self.display.canvas, 60, 280, "TkHeadingFont", 'n', "ppm")
+        ph_str = str(self.sel_plant.pH_min) + "-" + str(self.sel_plant.pH_max)
+        CanvasText(self.display.canvas, 240, 220, self.h[3], 'n', 'pH')
+        CanvasText(self.display.canvas, 240, 270, "TkHeadingFont", 'n', ph_str)
+        sun_str = str(self.sel_plant.sun_min) + '-' + str(self.sel_plant.sun_max)
+        CanvasText(self.display.canvas, 420, 220, self.h[3], 'n', 'Sunlight')
+        CanvasText(self.display.canvas, 420, 260, "TkHeadingFont", 'n', sun_str)
+        CanvasText(self.display.canvas, 420, 280, "TkHeadingFont", 'n', "hours")
+        time_str = str(self.sel_plant.germ_days + self.sel_plant.harvest_days)
+        CanvasText(self.display.canvas, 600, 220, self.h[3], 'n', 'Est. Time')
+        CanvasText(self.display.canvas, 600, 260, "TkHeadingFont", 'n', time_str)
+        CanvasText(self.display.canvas, 600, 280, "TkHeadingFont", 'n', "days")
         self.back_button = CanvasButton(self.display.canvas, 175, 325, 
                                             "Back", self.gen_buttons,
                                             'center')
@@ -402,28 +433,29 @@ class CreditsScreen:
         self.sponsors = sponsors
         self.h = h
         self.generate_credits()
+
     def generate_credits(self):
-        students_formatted = self.students.copy()
-        random.shuffle(students_formatted)
+        st_fmt = self.students.copy()
+        random.shuffle(st_fmt)
         CanvasText(self.display.canvas, 350, 0, self.h[3], 'n', 
                    "HSA Engineering 2026 Graduating Class")
-        while (len(students_formatted)+len(self.second_line)) % self.num_col != 0:
-            students_formatted.append("")
-        num_students = len(students_formatted)
+        while (len(st_fmt)+len(self.second_line)) % self.num_col != 0:
+            st_fmt.append("")
+        num_students = len(st_fmt)
         num_row = (num_students+len(second_line))//self.num_col
         for i in range(self.num_col):
             j = 0
             while (j < num_row):
                 pos = j+i*num_row
-                student = students_formatted[pos]
+                student = st_fmt[pos]
                 if pos % num_row == num_row - 1:
                     if student in self.second_line.keys():
                         # print("Moving")
                         x = 1
-                        while students_formatted[pos+x] in self.second_line.keys():
+                        while st_fmt[pos+x] in self.second_line.keys():
                             x += 1
-                        students_formatted[pos], students_formatted[pos+x] = students_formatted[pos+x], students_formatted[pos]
-                        student = students_formatted[pos]
+                        st_fmt[pos], st_fmt[pos+x] = st_fmt[pos+x], st_fmt[pos]
+                        student = st_fmt[pos]
                 if student != "":
                     txt = "\u2022 " + student
                 else:
@@ -431,8 +463,8 @@ class CreditsScreen:
                 CanvasText(self.display.canvas, 30+i*210, 30*j+40, self.h[3], 'nw', txt)
                 if student in self.second_line.keys():
                     j += 1
-                    students_formatted.insert(pos+1, self.second_line[student])
-                    txt = "   " + students_formatted[pos+1]
+                    st_fmt.insert(pos+1, self.second_line[student])
+                    txt = "   " + st_fmt[pos+1]
                     CanvasText(self.display.canvas, 30+i*210, 30*j+40, self.h[3], 
                                'nw', txt)
                 j += 1
@@ -447,7 +479,7 @@ class CreditsScreen:
         thanks = CanvasText(self.display.canvas, 30, 
                             30*(num_students//self.num_col+4)+50, self.h[4], 'nw', txt)
         thanks.update_width(600)
-        del students_formatted
+        del st_fmt
     
     def gen_str(self, start, elements):
         txt = start
@@ -547,14 +579,15 @@ class App:
         popupWindow.focus_set()
         
     def abort_program(self):
-        os.remove(self.fname)
         self.activePlant = ActivePlant(plantDB[-1])
-        self.homeScreen.plant_name.update_text(self.activePlant.name)
-        self.homeScreen.update_status(0,"No Program Running")
+        self.homeScreen.update_plant(self.activePlant)
+        os.remove(self.fname)
     
     def pause_program(self):
         self.activePlant.set_running(False)
-        self.homeScreen.update_status(0,"Program Paused")
+        self.homeScreen.update_plant(self.activePlant)
+        with open(self.fname, "wb") as fout:
+            pickle.dump(self.activePlant, fout)
     
     def start_program(self):
         if self.activePlant.name == "None":
@@ -562,11 +595,13 @@ class App:
                                     message="Select a plant from the Plants tab")
         else:
             self.activePlant.set_running(True)
-            self.homeScreen.update_status(1,"All Systems Normal")
+            self.homeScreen.update_plant(self.activePlant)
+            with open(self.fname, "wb") as fout:
+                pickle.dump(self.activePlant, fout)
     
     def load_plant(self, plant):
         self.activePlant = ActivePlant(plant)
-        self.homeScreen.plant_name.update_text(self.activePlant.name)
+        self.homeScreen.update_plant(self.activePlant)
         with open(self.fname, "wb") as fout:
             pickle.dump(self.activePlant, fout)
         self.plantsScreen.page = 0
@@ -596,7 +631,7 @@ try:
 except:
     print("Plant Database failed to load!!")
     sys.exit("No Plant Database")
-plantDB.append(Plant("None", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)) 
+plantDB.append(Plant("None", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "This plant is not in the proper format or is misspelled in the available_plants list. Please check the spelling or review the database, recompile and try again")) 
 
 # Main Application
 root = Fullscreen_Window()
