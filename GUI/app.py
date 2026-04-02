@@ -1,9 +1,12 @@
 import tkinter as tk  # PEP 8 recommends avoiding `import *`.
 from tkinter import font
 import tkinter.messagebox
-from time import gmtime, strftime
+from time import gmtime, strftime, time
+from datetime import date, timedelta
 import random, pickle, os, sys
-
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
+                                               NavigationToolbar2Tk)
 class Plant():
     tolerance = 0.1
     def __init__(self, name, pH_min, pH_max, ec_min, ec_max,cf_min, 
@@ -35,22 +38,47 @@ class ActivePlant(Plant):
                          plant.ppm700_max, plant.ppm500_min, plant.ppm500_max, 
                          plant.sun_min, plant.sun_max, plant.germ_days,
                          plant.harvest_days, plant.desc)
-        self.harvest_date = "--/--/----"
+        self.total_days = self.harvest_days + self.germ_days
+        self.start_date = 0
         self.running = False
+        self.paused = False
         self.error = False
+        self.error_msgs = ("pH is too low", "pH is too high", "tds is too low",
+                           "tds is too high", "serial communication is lost")
         self.error_msg = "Error"
-    def set_running(self, value):
-        self.running = value
+        self.tds = 800
+        self.ph = 6.2
+        self.light_status = "On"
+        self.time_left = self.total_days
+        self.set_date()
+    
+    def start_stop(self):
+        self.running = not self.running
+
+    def pause(self):
+        self.paused = not self.paused
+    
     def index_available(self):
         for available_plant in self.available_plants:
             self.find_indices(available_plant)
         print(self.available_indices)
+    
     def find_indices(self, available_plant):
         try:
             self.available_indices.append(next(filter(
                 lambda x: x[1].name == available_plant, enumerate(plantDB)))[0])
         except StopIteration:
             self.available_indices.append(-1)
+
+    def set_date(self):
+        if not self.running:
+            self.start_date = 0
+            self.harvest_date = "--/--/--"
+        else:
+            self.start_date = date.today()
+            self.harvest = self.start_date + timedelta(days=self.total_days)
+            self.harvest_date = self.harvest.strftime("%m/%d/%y")
+
 
 class Fullscreen_Window:
 
@@ -168,6 +196,7 @@ class CanvasImageButton:
         self.canvas_btn_img_obj = canvas.create_image(x, y, anchor=anchor, state=state,
                                                       image=self.btn_image)
         if btn_num is not None:
+            print(btn_num)
             canvas.tag_bind(self.canvas_btn_img_obj, "<ButtonRelease-1>",
                             lambda event: (command(btn_num)))
         else:
@@ -176,6 +205,7 @@ class CanvasImageButton:
             canvas.tag_bind(self.canvas_btn_img_obj, "<ButtonRelease-1>",
                             lambda event: (command()))
         self.set_state(state)
+    
     def flash(self):
         self.set_state(tk.HIDDEN)
         self.canvas.after(self.flash_delay, self.set_state, tk.NORMAL)
@@ -282,7 +312,7 @@ class HomeScreen:
             self.controls.append(CanvasButton(self.display.canvas, 600, 300, 
                                               self.ctl_btn_paths[i], self.ctl_cmds[i],
                                               'center', None, tk.HIDDEN))
-        self.update_plant(activePlant)
+        self.change_state(activePlant)
 
     def update_time(self):
         string_time = strftime('%H:%M ')
@@ -300,37 +330,37 @@ class HomeScreen:
         self.year.move_text_lr(self.weekday.bbox[2]-self.year.bbox[2]+
                                self.year.bbox[0]-3)
      
-    def update_home(self):
+    def update_home(self, activePlant):
         self.update_time()
-        if self.update_controls:
+        if self.activePlant.error:
+            self.leds[2].set_state(tk.NORMAL)
+            self.status_msg.update_text(self.activePlant.error_msg)
+        elif self.update_controls:
             self.update_controls = False
             for control in self.controls:
                 control.set_state(tk.HIDDEN)
             for led in self.leds:
                 led.set_state(tk.HIDDEN)
-            if self.activePlant.error:
-                self.leds[2].set_state(tk.NORMAL)
-                self.status_msg.update_text(self.activePlant.error_msg)
-            elif self.activePlant.running:
-                print("Running")
+            if self.activePlant.running and not self.activePlant.paused:
                 self.controls[1].set_state(tk.NORMAL)
                 self.leds[1].set_state(tk.NORMAL)
                 self.status_msg.update_text("All Systems Normal")
             else:
                 self.controls[0].set_state(tk.NORMAL)
                 self.leds[0].set_state(tk.NORMAL)
-                if self.activePlant.name == "None":
-                    self.status_msg.update_text("No Program Running")
-                else:
+                if self.activePlant.paused:
                     self.status_msg.update_text("Program Paused")
+                else:
+                    self.status_msg.update_text("No Program Running")
         # lambda:(command(btn_num))
-        self.display.canvas.after(1000, self.update_home)
+        # self.display.canvas.after(1000, self.update_home)
 
-    def update_plant(self, activePlant):
+    def change_state(self, activePlant):
         self.update_controls = True
         self.activePlant = activePlant
         self.plant_name.update_text(self.activePlant.name)
-        self.update_home()
+        self.update_home(activePlant)
+        self.harvest_date.update_text(self.activePlant.harvest_date) 
 
 class PlantsScreen:
     def __init__(self, display, plant_btn_paths, plant_img_paths, plant_load_cmd, 
@@ -345,7 +375,7 @@ class PlantsScreen:
         self.num_row = num_row
         self.page = 0
         self.num_plants = len(self.activePlant.available_plants)
-        self.additional = True if self.num_plants >= self.num_col * self.num_row else False
+        # self.additional = True if self.num_plants >= self.num_col * self.num_row else False
         self.plant_buttons = []
         self.gen_buttons()
 
@@ -417,9 +447,106 @@ class PlantsScreen:
         self.back_button = CanvasButton(self.display.canvas, 175, 325, 
                                             "Back", self.gen_buttons,
                                             'center')
-        self.load_button = CanvasButton(self.display.canvas, 525, 325, 
-                                            "Load", self.plant_load_cmd,
-                                            'center', self.sel_plant)
+        if not self.activePlant.running:
+            self.load_button = CanvasButton(self.display.canvas, 525, 325, 
+                                                "Load", self.plant_load_cmd,
+                                                'center', self.sel_plant)
+    def reset(self):
+        self.page = 0
+        self.gen_buttons()
+
+class StatsScreen:
+    def __init__(self, display, activePlant, h):
+        self.display = display
+        self.activePlant = activePlant
+        self.h = h
+        self.x = []
+        self.y1 = []
+        self.y2 = []
+        self.fig = Figure(figsize=(5.4,2.5), dpi=100)
+        self.display_stats(activePlant)
+        if self.activePlant.name == "None":
+            self.displays_active = False
+        else:
+            self.displays_active = True
+
+    def display_stats(self, activePlant):
+        self.activePlant = activePlant
+        self.display.clear()
+        try:
+            self.gcanvas.get_tk_widget().destroy()
+        except AttributeError:
+            pass
+        if self.activePlant.name == "None":
+            warning = CanvasText(self.display.canvas, 350, 100, self.h[2], 'n',
+                                 "Please Run a Plant Program To View Stats")
+            warning.update_width(650)
+            warning.align_text("center")
+            self.x.clear()
+            self.y1.clear()
+            self.y2.clear()
+            self.displays_active = False
+        else:
+            # self.plant_name = CanvasText(self.display.canvas, 500, 0, self.h[3], 'n', self.activePlant.name)
+            CanvasText(self.display.canvas, 60, 255, self.h[3], 'n', 'TDS')
+            self.tds_disp =CanvasText(self.display.canvas, 60, 295, 
+                                 "TkHeadingFont", 'n', self.activePlant.tds)
+            CanvasText(self.display.canvas, 60, 315, "TkHeadingFont", 'n', "ppm")
+            CanvasText(self.display.canvas, 240, 255, self.h[3], 'n', 'pH')
+            self.ph_disp = CanvasText(self.display.canvas, 240, 305, 
+                                 "TkHeadingFont", 'n', self.activePlant.ph)
+            CanvasText(self.display.canvas, 420, 255, self.h[3], 'n', 'Light')
+            self.light_status = CanvasText(self.display.canvas, 420, 305, 
+                                           "TkHeadingFont", 'n', 
+                                           self.activePlant.light_status)
+            CanvasText(self.display.canvas, 600, 255, self.h[3], 'n', 'Est. Time')
+            self.time_left = CanvasText(self.display.canvas, 600, 295, 
+                                        "TkHeadingFont", 'n', self.activePlant.time_left)
+            CanvasText(self.display.canvas, 600, 315, "TkHeadingFont", 'n', "days")
+            
+            self.plot1 = self.fig.add_subplot(111)
+            self.line1, = self.plot1.plot([], [], 'r-', label="TDS")
+            self.plot1.set_ylim(600, 800)
+            self.plot1.set_title("Sensor History")
+            self.plot1.set_xlabel("Time")
+            self.plot1.set_ylabel("Parts per Million (ppm)")
+            self.plot2 = self.plot1.twinx()
+            self.line2, = self.plot2.plot([], [], 'b-', label="pH")
+            self.plot2.set_ylim(5, 8)
+            self.plot2.set_ylabel("pH")
+
+            self.lns = [self.line1, self.line2]
+            self.labs = [l.get_label() for l in self.lns]
+            self.plot1.legend(self.lns, self.labs)
+            
+            self.gcanvas = FigureCanvasTkAgg(self.fig, master=self.display.canvas)
+            self.gcanvas.get_tk_widget().place(x=60, y=0)
+            
+            self.displays_active = True
+
+    def update_plot(self):
+        self.x.append(time() % 50)
+        self.y1.append(self.activePlant.tds)
+        self.y2.append(self.activePlant.ph)
+
+        if len(self.y1) > 50:
+            self.x.pop(0)
+            self.y1.pop(0)
+            self.y2.pop(0)
+
+        self.line1.set_data(range(len(self.y1)), self.y1)
+        self.line2.set_data(range(len(self.y2)), self.y2)
+        self.plot1.set_xlim(0, len(self.y1))
+        self.gcanvas.draw()
+
+    def update_stats(self, activePlant):
+        self.activePlant = activePlant
+        if self.displays_active:
+            self.tds_disp.update_text(self.activePlant.tds)
+            self.ph_disp.update_text(self.activePlant.ph)
+            self.light_status.update_text(self.activePlant.light_status)
+            self.time_left.update_text(self.activePlant.time_left)
+            self.update_plot()
 
 class CreditsScreen:
     def __init__(self, display, students, second_line, instructors, advisors, 
@@ -551,18 +678,27 @@ class App:
                                          self.activePlant, self.h)
 
         # Stats Display
+        self.statsScreen = StatsScreen(self.displays[2], self.activePlant, self.h)
 
         # Credits Display
         self.creditsScreen = CreditsScreen(self.displays[3], students, second_line, 
                                            instructors, advisors, sponsors, self.h)
         # Start from Home
-        self.displays[1].set_state(tk.NORMAL)
+        self.nav_clicked(0)
+
+        self.index = 0
+        self.max_index = 9
+        self.tds_tuple = (712, 704, 701, 722, 729, 736, 742, 744, 701, 733)
+        self.ph_tuple = (6.9, 6.9, 6.6, 7.3, 6.8, 6.5, 6.6, 7.1, 7.1, 7.3)
+        
+        self.update_displays()
 
     def btn_clicked():
         """ Prints to console a message every time the button is clicked """
         print("Button Clicked")
     
     def nav_clicked(self,btn):
+        print(btn)
         self.nav_btns[btn].flash()
         for display in self.displays:
             display.set_state(tk.HIDDEN)
@@ -580,33 +716,54 @@ class App:
         
     def abort_program(self):
         self.activePlant = ActivePlant(plantDB[-1])
-        self.homeScreen.update_plant(self.activePlant)
+        self.homeScreen.change_state(self.activePlant)
+        self.statsScreen.display_stats(self.activePlant)
         os.remove(self.fname)
     
     def pause_program(self):
-        self.activePlant.set_running(False)
-        self.homeScreen.update_plant(self.activePlant)
-        with open(self.fname, "wb") as fout:
-            pickle.dump(self.activePlant, fout)
-    
+        self.activePlant.pause()
+        self.homeScreen.change_state(self.activePlant)
+        self.save_state()
+
     def start_program(self):
         if self.activePlant.name == "None":
             tk.messagebox.showerror(title="No Plant Selected",
                                     message="Select a plant from the Plants tab")
         else:
-            self.activePlant.set_running(True)
-            self.homeScreen.update_plant(self.activePlant)
-            with open(self.fname, "wb") as fout:
-                pickle.dump(self.activePlant, fout)
-    
+            if self.activePlant.paused:
+                self.activePlant.pause()
+            else:
+                self.activePlant.start_stop()
+                self.activePlant.set_date()
+                self.statsScreen.display_stats(self.activePlant)
+                self.plantsScreen.reset()
+            self.homeScreen.change_state(self.activePlant)
+            self.save_state()
+
     def load_plant(self, plant):
         self.activePlant = ActivePlant(plant)
-        self.homeScreen.update_plant(self.activePlant)
+        self.homeScreen.change_state(self.activePlant)
         with open(self.fname, "wb") as fout:
             pickle.dump(self.activePlant, fout)
-        self.plantsScreen.page = 0
-        self.plantsScreen.gen_buttons()
+        self.plantsScreen.reset()
         self.nav_clicked(0)
+
+    def update_displays(self):
+        # print("Updating")
+        self.homeScreen.update_home(self.activePlant)
+        self.statsScreen.update_stats(self.activePlant)
+        self.plantsScreen.activePlant.running = self.activePlant.running
+        self.index += 1
+        if self.index > self.max_index:
+            self.index = 0
+        self.activePlant.tds = self.tds_tuple[self.index]
+        self.activePlant.ph = self.ph_tuple[self.index]
+        root.frame.after(1000, self.update_displays)
+
+    def save_state(self):
+        if self.activePlant.running:
+            with open(self.fname, "wb") as fout:
+                pickle.dump(self.activePlant, fout)
 
 # Read-only Data
 BGR_IMG_PATH = "assets/bg.png"
