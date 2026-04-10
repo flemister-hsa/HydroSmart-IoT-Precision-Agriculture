@@ -1,7 +1,9 @@
 import tkinter as tk  # PEP 8 recommends avoiding `import *`.
 from tkinter import font
 import tkinter.messagebox
-from time import gmtime, strftime, time
+from time import gmtime, strftime, time, sleep
+import json
+from serial import Serial, SerialException
 from datetime import date, timedelta
 import random, pickle, os, sys
 from matplotlib.figure import Figure
@@ -48,7 +50,7 @@ class ActivePlant(Plant):
         self.error_msg = "Error"
         self.tds = 800
         self.ph = 6.2
-        self.light_status = "On"
+        self.light_status = 0
         self.time_left = self.total_days
         self.set_date()
     
@@ -78,6 +80,58 @@ class ActivePlant(Plant):
             self.start_date = date.today()
             self.harvest = self.start_date + timedelta(days=self.total_days)
             self.harvest_date = self.harvest.strftime("%m/%d/%y")
+
+class SerialInterface:
+    """Creates a Serial Interface with the specified parameters and allows to read from
+    and write to it."""
+    def __init__(self, port="/dev/ttyACM0", baud=115200):
+        self.no_response = False
+        self.timeout_timer = time()
+        self.ser = Serial(port, baudrate=baud)
+        sleep(2)
+
+    def read_from(self):
+        """Reads a line from the serial buffer,
+        decodes it and returns its contents as a dict."""
+        now = time()
+        if (now - self.timeout_timer) > 3:
+            print("Timeout reached. No message received.")
+            return None
+
+        if self.ser.in_waiting == 0:
+            # Nothing received
+            self.no_response = True
+            return None
+
+        incoming = self.ser.readline().decode("utf-8")
+        resp = None
+        self.no_response = False
+        self.timeout_timer = time()
+
+        try:
+            resp = json.loads(incoming)
+        except json.JSONDecodeError:
+            print("Error decoding JSON message!")
+
+        return resp
+
+    def send_to(self, message=None):
+        """Sends a JSON-formatted command to the serial
+        interface."""
+        if self.no_response:
+            # If no response was received last time, we don't send another request
+            return
+
+        try:
+            json_msg = json.dumps(message)
+            self.ser.write(json_msg.encode("utf-8"))
+        except TypeError:
+            print("Unable to serialize message.")
+
+    def close(self):
+        """Close the Serial connection."""
+        self.ser.close()
+
 
 
 class Fullscreen_Window:
@@ -390,6 +444,7 @@ class PlantsScreen:
                 if index < self.num_plants:
                     self.plant_buttons.append(CanvasButton(self.display.canvas, 
                                                            j*175+80, i*150, 
+                                                           # self.plant_btn_paths[index%3],
                                                            self.plant_btn_paths[index],
                                                            self.display_plant, 
                                                            'n', index))
@@ -423,6 +478,7 @@ class PlantsScreen:
         self.display.clear()
         self.sel_plant = plantDB[self.activePlant.available_indices[plant_num]]
         self.plant_portrait = CanvasImage(self.display.canvas, 0, 0, 
+                                          # self.plant_img_paths[plant_num%3], 'nw')
                                           self.plant_img_paths[plant_num], 'nw')
         self.plant_name = CanvasText(self.display.canvas, 500, 0, self.h[3],
                                      'n', self.sel_plant.name)
@@ -496,9 +552,13 @@ class StatsScreen:
             self.ph_disp = CanvasText(self.display.canvas, 240, 305, 
                                  "TkHeadingFont", 'n', self.activePlant.ph)
             CanvasText(self.display.canvas, 420, 255, self.h[3], 'n', 'Light')
+            if self.activePlant.light_status == 0:
+                light_msg = "Off"
+            else:
+                light_msg = "On"
             self.light_status = CanvasText(self.display.canvas, 420, 305, 
                                            "TkHeadingFont", 'n', 
-                                           self.activePlant.light_status)
+                                           light_msg)
             CanvasText(self.display.canvas, 600, 255, self.h[3], 'n', 'Est. Time')
             self.time_left = CanvasText(self.display.canvas, 600, 295, 
                                         "TkHeadingFont", 'n', self.activePlant.time_left)
@@ -544,7 +604,11 @@ class StatsScreen:
         if self.displays_active:
             self.tds_disp.update_text(self.activePlant.tds)
             self.ph_disp.update_text(self.activePlant.ph)
-            self.light_status.update_text(self.activePlant.light_status)
+            if self.activePlant.light_status == 0:
+                light_msg = "Off"
+            else:
+                light_msg = "On"
+            self.light_status.update_text(light_msg)
             self.time_left.update_text(self.activePlant.time_left)
             self.update_plot()
 
@@ -648,7 +712,8 @@ class App:
         
         self.activePlant.index_available()
 
-
+        # self.arduino = self.start_arduino()
+        
         font_sizes = (120, 64, 40, 24, 16)
         self.h = []
         for i in range(len(font_sizes)):
@@ -718,6 +783,8 @@ class App:
         self.activePlant = ActivePlant(plantDB[-1])
         self.homeScreen.change_state(self.activePlant)
         self.statsScreen.display_stats(self.activePlant)
+        msg = {"msg": "CMD", "light_state": "0"}  # Define your JSON message
+        # self.arduino.send_to(msg)
         os.remove(self.fname)
     
     def pause_program(self):
@@ -739,6 +806,8 @@ class App:
                 self.plantsScreen.reset()
             self.homeScreen.change_state(self.activePlant)
             self.save_state()
+            msg = {"msg": "CMD", "light_state": "1"}  # Define your JSON message
+            # self.arduino.send_to(msg)
 
     def load_plant(self, plant):
         self.activePlant = ActivePlant(plant)
@@ -750,20 +819,33 @@ class App:
 
     def update_displays(self):
         # print("Updating")
-        self.homeScreen.update_home(self.activePlant)
-        self.statsScreen.update_stats(self.activePlant)
-        self.plantsScreen.activePlant.running = self.activePlant.running
         self.index += 1
         if self.index > self.max_index:
             self.index = 0
         self.activePlant.tds = self.tds_tuple[self.index]
         self.activePlant.ph = self.ph_tuple[self.index]
+        self.homeScreen.update_home(self.activePlant)
+        self.statsScreen.update_stats(self.activePlant)
+        self.plantsScreen.activePlant.running = self.activePlant.running
         root.frame.after(1000, self.update_displays)
 
     def save_state(self):
         if self.activePlant.running:
             with open(self.fname, "wb") as fout:
                 pickle.dump(self.activePlant, fout)
+
+    def start_arduino(self):
+        connection_est = False
+        while not connection_est:
+            try:    
+                arduino = SerialInterface()
+                connection_est = True
+            except SerialException:
+                print("Cannot establish connection!!")
+                sleep(2)
+        return arduino
+
+
 
 # Read-only Data
 BGR_IMG_PATH = "assets/bg.png"
@@ -793,4 +875,5 @@ plantDB.append(Plant("None", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "This pla
 # Main Application
 root = Fullscreen_Window()
 app = App(root)
+# root.protocol("WM_DELETE_WINDOW", ask_quit)
 root.tk.mainloop()
