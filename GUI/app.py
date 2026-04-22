@@ -712,7 +712,7 @@ class App:
         
         self.activePlant.index_available()
 
-        # self.arduino = self.start_arduino()
+        self.arduino = self.start_arduino()
         
         font_sizes = (120, 64, 40, 24, 16)
         self.h = []
@@ -784,7 +784,13 @@ class App:
         self.homeScreen.change_state(self.activePlant)
         self.statsScreen.display_stats(self.activePlant)
         msg = {"msg": "CMD", "light_state": "0"}  # Define your JSON message
-        # self.arduino.send_to(msg)
+        self.arduino.send_to(msg)
+        # return_msg = None;
+        # while return_msg == None:
+        #     self.arduino.send_to(msg)
+        #     sleep(1)
+        #     return_msg = self.arduino.read_from()
+        #     print(return_msg)
         os.remove(self.fname)
     
     def pause_program(self):
@@ -807,7 +813,7 @@ class App:
             self.homeScreen.change_state(self.activePlant)
             self.save_state()
             msg = {"msg": "CMD", "light_state": "1"}  # Define your JSON message
-            # self.arduino.send_to(msg)
+            self.arduino.send_to(msg)
 
     def load_plant(self, plant):
         self.activePlant = ActivePlant(plant)
