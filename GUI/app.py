@@ -32,7 +32,8 @@ class Plant():
         self.desc = desc
 
 class ActivePlant(Plant):
-    available_plants = ["Lettuce", "Basil", "Strawberries"]
+    # available_plants = ["Lettuce", "Basil", "Strawberries"]
+    available_plants = ["Lettuce", "Basil", "Strawberries", "Lettuce", "Basil", "Strawberries", "Lettuce", "Basil", "Strawberries", "Lettuce", "Basil", "Strawberries"]
     available_indices = []
     def __init__(self, plant):
         super().__init__(plant.name, plant.pH_min, plant.pH_max, plant.ec_min, 
@@ -84,49 +85,61 @@ class ActivePlant(Plant):
 class SerialInterface:
     """Creates a Serial Interface with the specified parameters and allows to read from
     and write to it."""
-    def __init__(self, port="/dev/ttyACM0", baud=115200):
+    def __init__(self, port="/dev/ttyACM0", baud=115200, connect=True):
         self.no_response = False
         self.timeout_timer = time()
-        self.ser = Serial(port, baudrate=baud)
+        if connect:
+            self.ser = Serial(port, baudrate=baud)
+        else:
+            self.ser = -1;
         sleep(2)
 
     def read_from(self):
         """Reads a line from the serial buffer,
         decodes it and returns its contents as a dict."""
-        now = time()
-        if (now - self.timeout_timer) > 3:
-            print("Timeout reached. No message received.")
-            return None
+        if self.ser == -1:
+            print("DEBUG MODE")
+            print("Serial not connected!")
+        else:
+            now = time()
+            if (now - self.timeout_timer) > 3:
+                print("Timeout reached. No message received.")
+                return None
 
-        if self.ser.in_waiting == 0:
-            # Nothing received
-            self.no_response = True
-            return None
+            if self.ser.in_waiting == 0:
+                # Nothing received
+                self.no_response = True
+                return None
 
-        incoming = self.ser.readline().decode("utf-8")
-        resp = None
-        self.no_response = False
-        self.timeout_timer = time()
+            incoming = self.ser.readline().decode("utf-8")
+            resp = None
+            self.no_response = False
+            self.timeout_timer = time()
 
-        try:
-            resp = json.loads(incoming)
-        except json.JSONDecodeError:
-            print("Error decoding JSON message!")
+            try:
+                resp = json.loads(incoming)
+            except json.JSONDecodeError:
+                print("Error decoding JSON message!")
 
-        return resp
+            return resp
 
     def send_to(self, message=None):
         """Sends a JSON-formatted command to the serial
         interface."""
-        if self.no_response:
-            # If no response was received last time, we don't send another request
-            return
-
-        try:
+        if self.ser == -1:
+            print("DEBUG MODE")
             json_msg = json.dumps(message)
-            self.ser.write(json_msg.encode("utf-8"))
-        except TypeError:
-            print("Unable to serialize message.")
+            print(json_msg)
+        else:
+            if self.no_response:
+                # If no response was received last time, we don't send another request
+                return
+
+            try:
+                json_msg = json.dumps(message)
+                self.ser.write(json_msg.encode("utf-8"))
+            except TypeError:
+                print("Unable to serialize message.")
 
     def close(self):
         """Close the Serial connection."""
@@ -462,6 +475,21 @@ class PlantsScreen:
         if self.additional:
             self.next_button = CanvasButton(self.display.canvas, 525, 325, 
                                             "Next", self.next_page,
+                                            'center')
+        self.manual_mode = CanvasButton(self.display.canvas, 325, 325,
+                                        "Manual", self.start_manual,
+                                        "center")
+    def start_manual(self):
+        self.display.clear()
+        # self.light_on_button = CanvasButton(self.display.canvas, 175, 25,
+        #                                     "Light On", self.light_on,
+        #                                     "center")
+        # self.light_off_button = CanvasButton(self.display.canvas, 175, 25,
+        #                                     "Light Off", self.light_off,
+        #                                     "center")
+
+        self.back_button = CanvasButton(self.display.canvas, 175, 325, 
+                                            "Back", self.gen_buttons,
                                             'center')
      
     def next_page(self):
@@ -842,13 +870,20 @@ class App:
 
     def start_arduino(self):
         connection_est = False
+        tries = 0
         while not connection_est:
-            try:    
-                arduino = SerialInterface()
+            if tries < 3:
+                try:    
+                    arduino = SerialInterface()
+                    connection_est = True
+                except SerialException:
+                    print("Cannot establish connection!!")
+                    sleep(2)
+                    tries += 1
+            else:
+                arduino = SerialInterface(None, None, False)
+                print("No Connection. Entering Debug Mode")
                 connection_est = True
-            except SerialException:
-                print("Cannot establish connection!!")
-                sleep(2)
         return arduino
 
 
@@ -860,8 +895,10 @@ NAV_BTN_PATHS = ("assets/button-home.png", "assets/button-plant.png",
 HSA_ICON_PATH = "assets/hsa-ico.png"
 LED_PATHS = ("assets/led-white.png", "assets/led-green.png", "assets/led-red.png")
 CTL_BTN_PATHS = ("assets/button-start.png", "assets/button-abort.png")
-PLANT_BTN_PATHS = ('assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png")
-PLANT_IMG_PATHS = ('assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png')
+# PLANT_BTN_PATHS = ('assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png")
+# PLANT_IMG_PATHS = ('assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png')
+PLANT_BTN_PATHS = ('assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png",'assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png",'assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png",'assets/button-lettuce.png', "assets/button-basil.png", "assets/button-strawberries.png")
+PLANT_IMG_PATHS = ('assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png', 'assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png', 'assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png', 'assets/portrait-lettuce.png', 'assets/portrait-basil.png', 'assets/portrait-strawberries.png')
 students = ["Hajr Abdullah", "Amelia Allison", "Foday Lamboi", "Brandon Jimenez-", "Cedrick Abotchi", "Caleb Kolie", "Abdul Bayoh", "Abdimalik Mire", "Zack Abdullahi", "Salmaan Mosa", "Mohammed Ali"]
 second_line = {"Brandon Jimenez-":"Martinez"}
 instructors = ["Dorma Flemister"]
