@@ -431,12 +431,13 @@ class HomeScreen:
 
 class PlantsScreen:
     def __init__(self, display, plant_btn_paths, plant_img_paths, plant_load_cmd, 
-                 activePlant, h, num_col=4, num_row=2): 
+                 activePlant, h, arduino, num_col=4, num_row=2): 
         self.display = display
         self.plant_btn_paths = plant_btn_paths
         self.plant_img_paths = plant_img_paths
         self.plant_load_cmd = plant_load_cmd
         self.activePlant = activePlant
+        self.arduino = arduino
         self.h = h
         self.num_col = num_col
         self.num_row = num_row
@@ -479,19 +480,91 @@ class PlantsScreen:
         self.manual_mode = CanvasButton(self.display.canvas, 325, 325,
                                         "Manual", self.start_manual,
                                         "center")
+    
+    def change_state(self, activePlant):
+        self.activePlant = activePlant
+    
     def start_manual(self):
-        self.display.clear()
-        # self.light_on_button = CanvasButton(self.display.canvas, 175, 25,
-        #                                     "Light On", self.light_on,
-        #                                     "center")
-        # self.light_off_button = CanvasButton(self.display.canvas, 175, 25,
-        #                                     "Light Off", self.light_off,
-        #                                     "center")
-
-        self.back_button = CanvasButton(self.display.canvas, 175, 325, 
+        if self.activePlant.running and not self.activePlant.paused:
+            tk.messagebox.showerror(title="Program Mode Running",
+                                    message="Please abort or pause the current grow program to run manual mode")
+        else:
+            self.display.clear()
+            
+            CanvasText(self.display.canvas, 175,   0, self.h[3], 'ne', "Light")
+            self.light_on_btn = CanvasButton(self.display.canvas, 225, 0,
+                                             "On", self.man_light_on, 'n')
+            self.light_off_btn = CanvasButton(self.display.canvas, 300, 0,
+                                             "Off", self.man_light_off, 'n')
+            self.light_status = CanvasText(self.display.canvas, 350, 0, self.h[3], 'nw', "Off")
+            CanvasText(self.display.canvas, 175,  50, self.h[3], 'ne', "Water Pump")
+            self.water_on_btn = CanvasButton(self.display.canvas, 225, 50,
+                                             "On", self.man_water_on, 'n')
+            self.water_off_btn = CanvasButton(self.display.canvas, 300, 50,
+                                             "Off", self.man_water_off, 'n')
+            self.water_status = CanvasText(self.display.canvas, 350, 50, self.h[3], 'nw', "Off")
+            CanvasText(self.display.canvas, 175, 100, self.h[3], 'ne', "pH Pump")
+            self.ph_on_btn = CanvasButton(self.display.canvas, 225, 100,
+                                             "On", self.man_ph_on, 'n')
+            self.ph_off_btn = CanvasButton(self.display.canvas, 300, 100,
+                                             "Off", self.man_ph_off, 'n')
+            self.ph_status = CanvasText(self.display.canvas, 350, 100, self.h[3], 'nw', "Off")
+            CanvasText(self.display.canvas, 175, 150, self.h[3], 'ne', "Nutrient Pump")
+            self.nutrient_on_btn = CanvasButton(self.display.canvas, 225, 150,
+                                             "On", self.man_nutrient_on, 'n')
+            self.nutrient_off_btn = CanvasButton(self.display.canvas, 300, 150,
+                                             "Off", self.man_nutrient_off, 'n')
+            self.nutrient_status = CanvasText(self.display.canvas, 350, 150, self.h[3], 'nw', "Off")
+            CanvasText(self.display.canvas, 175, 200, self.h[3], 'ne', "Plant Pump")
+            self.plant_on_btn = CanvasButton(self.display.canvas, 225, 200,
+                                             "On", self.man_plant_on, 'n')
+            self.plant_off_btn = CanvasButton(self.display.canvas, 300, 200,
+                                             "Off", self.man_plant_off, 'n')
+            self.plant_status = CanvasText(self.display.canvas, 350, 200, self.h[3], 'nw', "Off")
+            self.back_button = CanvasButton(self.display.canvas, 175, 325, 
                                             "Back", self.gen_buttons,
                                             'center')
-     
+    def man_light_on(self):
+        self.light_status.update_text("On")
+        msg = {"msg": "CMD", "light": "1"}
+        self.arduino.send_to(msg)
+    def man_light_off(self):
+        self.light_status.update_text("Off")
+        msg = {"msg": "CMD", "light": "0"}
+        self.arduino.send_to(msg)
+    def man_water_on(self):
+        self.water_status.update_text("On")
+        msg = {"msg": "CMD", "water_pump": "1"}
+        self.arduino.send_to(msg)
+    def man_water_off(self):
+        self.water_status.update_text("Off")
+        msg = {"msg": "CMD", "water_pump": "0"}
+        self.arduino.send_to(msg)
+    def man_ph_on(self):
+        self.ph_status.update_text("On")
+        msg = {"msg": "CMD", "ph_pump": "1"}
+        self.arduino.send_to(msg)
+    def man_ph_off(self):
+        self.ph_status.update_text("Off")
+        msg = {"msg": "CMD", "ph_pump": "0"}
+        self.arduino.send_to(msg)
+    def man_nutrient_on(self):
+        self.nutrient_status.update_text("On")
+        msg = {"msg": "CMD", "nutrient_pump": "1"}
+        self.arduino.send_to(msg)
+    def man_nutrient_off(self):
+        self.nutrient_status.update_text("Off")
+        msg = {"msg": "CMD", "nutrient_pump": "0"}
+        self.arduino.send_to(msg)
+    def man_plant_on(self):
+        self.plant_status.update_text("On")
+        msg = {"msg": "CMD", "plant_pump": "1"}
+        self.arduino.send_to(msg)
+    def man_plant_off(self):
+        self.plant_status.update_text("Off")
+        msg = {"msg": "CMD", "plant_pump": "0"}
+        self.arduino.send_to(msg)
+
     def next_page(self):
         self.page += 1
         self.gen_buttons()
@@ -768,7 +841,7 @@ class App:
         # Plants Display
         self.plantsScreen = PlantsScreen(self.displays[1], PLANT_BTN_PATHS, 
                                          PLANT_IMG_PATHS, self.load_plant, 
-                                         self.activePlant, self.h)
+                                         self.activePlant, self.h, self.arduino)
 
         # Stats Display
         self.statsScreen = StatsScreen(self.displays[2], self.activePlant, self.h)
@@ -810,8 +883,9 @@ class App:
     def abort_program(self):
         self.activePlant = ActivePlant(plantDB[-1])
         self.homeScreen.change_state(self.activePlant)
+        self.plantsScreen.change_state(self.activePlant)
         self.statsScreen.display_stats(self.activePlant)
-        msg = {"msg": "CMD", "light_state": "0"}  # Define your JSON message
+        msg = {"msg": "CMD", "start_program": "0"}  # Define your JSON message
         self.arduino.send_to(msg)
         # return_msg = None;
         # while return_msg == None:
@@ -824,6 +898,7 @@ class App:
     def pause_program(self):
         self.activePlant.pause()
         self.homeScreen.change_state(self.activePlant)
+        self.plantsScreen.change_state(self.activePlant)
         self.save_state()
 
     def start_program(self):
@@ -833,19 +908,27 @@ class App:
         else:
             if self.activePlant.paused:
                 self.activePlant.pause()
+                msg = {"msg": "CMD", "start_program": "0"}
+                self.arduino.send_to(msg)
             else:
                 self.activePlant.start_stop()
                 self.activePlant.set_date()
                 self.statsScreen.display_stats(self.activePlant)
                 self.plantsScreen.reset()
-            self.homeScreen.change_state(self.activePlant)
+                msg = {"msg": "CMD", "start_program": "1", 
+                       "tds_min": self.activePlant.ppm700_min,
+                       "tds_max": self.activePlant.ppm700_max,
+                       "pH_min": self.activePlant.pH_min,
+                       "pH_max": self.activePlant.pH_max}  # Define your JSON message
+                self.arduino.send_to(msg)
             self.save_state()
-            msg = {"msg": "CMD", "light_state": "1"}  # Define your JSON message
-            self.arduino.send_to(msg)
+            self.homeScreen.change_state(self.activePlant)
+            self.plantsScreen.change_state(self.activePlant)
 
     def load_plant(self, plant):
         self.activePlant = ActivePlant(plant)
         self.homeScreen.change_state(self.activePlant)
+        self.plantsScreen.change_state(self.activePlant)
         with open(self.fname, "wb") as fout:
             pickle.dump(self.activePlant, fout)
         self.plantsScreen.reset()
