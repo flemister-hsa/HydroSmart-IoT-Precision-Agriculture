@@ -42,21 +42,21 @@ void setup(){
     pinMode(ULTRA_TRIG_PIN, OUTPUT);
     pinMode(ULTRA_ECHO_PIN, INPUT);
     
-    noInterrupts();
-    TCCR5A = 0;
-    TCCR5B = 0;
-    TCNT5 = 0;
-    OCR5A = 1999; // party like register
-    TCCR5B |= (1 << WGM52); // CTC mode
-    TCCR5B |= (1 << CS51); // 8 prescaler
-    TIMSK5 |= (1 << OCIE5A);
-    interrupts();
+    cli();
+    TCCR4A = 0;
+    TCCR4B = 0;
+    TCNT4 = 0;
+    OCR4A = 1999; // party like register
+    TCCR4B |= (1 << WGM12); // CTC mode
+    TCCR4B |= (1 << CS11);
+    TIMSK4 |= (1 << OCIE4A);
+    sei();
 
-    digitalWrite(PH_PUMP_DIR, HIGH);
-    digitalWrite(NUTRI_PUMP_DIR, HIGH);
+    digitalWrite(PH_PUMP_DIR, LOW);
+    digitalWrite(NUTRI_PUMP_DIR, LOW);
 }
 
-ISR(Timer5_COMPA_vect) {
+ISR(TIMER4_COMPA_vect) {
     PORTB ^= B00110000; // toggles PH_PUMP_PIN & NUTRI_PUMP_PIN (must be on same port) 
     // digitalWrite(PH_PUMP_PIN, !digitalRead(PH_PUMP_PIN));
     // digitalWrite(NUTRI_PUMP_PIN, !digitalRead(NUTRI_PUMP_PIN));

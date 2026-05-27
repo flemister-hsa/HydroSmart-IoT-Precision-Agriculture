@@ -87,9 +87,9 @@ class SerialInterface:
     and write to it."""
     def __init__(self, port="/dev/ttyACM0", baud=115200, connect=True):
         self.no_response = False
-        self.timeout_timer = time()
+        # self.timeout_timer = time()
         if connect:
-            self.ser = Serial(port, baudrate=baud)
+            self.ser = Serial(port, baudrate=baud, timeout=.1)
         else:
             self.ser = -1;
         sleep(2)
@@ -100,11 +100,13 @@ class SerialInterface:
         if self.ser == -1:
             print("DEBUG MODE")
             print("Serial not connected!")
+            resp = "debug"
+            return resp
         else:
-            now = time()
-            if (now - self.timeout_timer) > 3:
-                print("Timeout reached. No message received.")
-                return None
+            # now = time()
+            # if (now - self.timeout_timer) > 3:
+            #     print("Timeout reached. No message received.")
+            #     return None
 
             if self.ser.in_waiting == 0:
                 # Nothing received
@@ -114,7 +116,7 @@ class SerialInterface:
             incoming = self.ser.readline().decode("utf-8")
             resp = None
             self.no_response = False
-            self.timeout_timer = time()
+            # self.timeout_timer = time()
 
             try:
                 resp = json.loads(incoming)
@@ -521,49 +523,70 @@ class PlantsScreen:
             self.plant_off_btn = CanvasButton(self.display.canvas, 300, 200,
                                              "Off", self.man_plant_off, 'n')
             self.plant_status = CanvasText(self.display.canvas, 350, 200, self.h[3], 'nw', "Off")
+            CanvasText(self.display.canvas, 175, 250, self.h[3], 'ne', "Mixer Motor")
+            self.mixer_on_btn = CanvasButton(self.display.canvas, 225, 250,
+                                             "On", self.man_mixer_on, 'n')
+            self.mixer_off_btn = CanvasButton(self.display.canvas, 300, 250,
+                                             "Off", self.man_mixer_off, 'n')
+            self.mixer_status = CanvasText(self.display.canvas, 350, 250, self.h[3], 'nw', "Off")
             self.back_button = CanvasButton(self.display.canvas, 175, 325, 
                                             "Back", self.gen_buttons,
                                             'center')
     def man_light_on(self):
         self.light_status.update_text("On")
-        msg = {"msg": "CMD", "light": "1"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "light", "val":"1"}
+        self.send_cmd(msg)
     def man_light_off(self):
         self.light_status.update_text("Off")
-        msg = {"msg": "CMD", "light": "0"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "light", "val":"0"}
+        self.send_cmd(msg)
     def man_water_on(self):
         self.water_status.update_text("On")
-        msg = {"msg": "CMD", "water_pump": "1"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "water_pump", "val":"1"}
+        self.send_cmd(msg)
     def man_water_off(self):
         self.water_status.update_text("Off")
-        msg = {"msg": "CMD", "water_pump": "0"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "water_pump", "val":"0"}
+        self.send_cmd(msg)
     def man_ph_on(self):
         self.ph_status.update_text("On")
-        msg = {"msg": "CMD", "ph_pump": "1"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "ph_pump", "val":"1"}
+        self.send_cmd(msg)
     def man_ph_off(self):
         self.ph_status.update_text("Off")
-        msg = {"msg": "CMD", "ph_pump": "0"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "ph_pump", "val":"0"}
+        self.send_cmd(msg)
     def man_nutrient_on(self):
         self.nutrient_status.update_text("On")
-        msg = {"msg": "CMD", "nutrient_pump": "1"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "nutrient_pump", "val":"1"}
+        self.send_cmd(msg)
     def man_nutrient_off(self):
         self.nutrient_status.update_text("Off")
-        msg = {"msg": "CMD", "nutrient_pump": "0"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "nutrient_pump", "val":"0"}
+        self.send_cmd(msg)
     def man_plant_on(self):
         self.plant_status.update_text("On")
-        msg = {"msg": "CMD", "plant_pump": "1"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "plant_pump", "val":"1"}
+        self.send_cmd(msg)
     def man_plant_off(self):
         self.plant_status.update_text("Off")
-        msg = {"msg": "CMD", "plant_pump": "0"}
-        self.arduino.send_to(msg)
+        msg = {"msg": "CMD", "cmd": "plant_pump", "val":"0"}
+        self.send_cmd(msg)
+    def man_mixer_on(self):
+        self.mixer_status.update_text("On")
+        msg = {"msg": "CMD", "cmd": "mixer_motor", "val":"1"}
+        self.send_cmd(msg)
+    def man_mixer_off(self):
+        self.mixer_status.update_text("Off")
+        msg = {"msg": "CMD", "cmd": "mixer_motor", "val":"0"}
+        self.send_cmd(msg)
+    def send_cmd(self, cmd):
+        self.arduino.send_to(cmd)
+        resp = self.arduino.read_from()
+        while resp is None:
+            self.arduino.send_to(cmd)
+            resp = self.arduino.read_from()
+        print(resp) 
 
     def next_page(self):
         self.page += 1
@@ -885,7 +908,7 @@ class App:
         self.homeScreen.change_state(self.activePlant)
         self.plantsScreen.change_state(self.activePlant)
         self.statsScreen.display_stats(self.activePlant)
-        msg = {"msg": "CMD", "start_program": "0"}  # Define your JSON message
+        msg = {"msg": "CMD", "cmd": "start_program", "val": "0"}
         self.arduino.send_to(msg)
         # return_msg = None;
         # while return_msg == None:
@@ -908,18 +931,19 @@ class App:
         else:
             if self.activePlant.paused:
                 self.activePlant.pause()
-                msg = {"msg": "CMD", "start_program": "0"}
+                msg = {"msg": "CMD", "cmd": "start_program", "val": "0"}
                 self.arduino.send_to(msg)
             else:
                 self.activePlant.start_stop()
                 self.activePlant.set_date()
                 self.statsScreen.display_stats(self.activePlant)
                 self.plantsScreen.reset()
-                msg = {"msg": "CMD", "start_program": "1", 
+                msg = {"msg": "CMD", "cmd": "start_program", "val": "1",
                        "tds_min": self.activePlant.ppm700_min,
                        "tds_max": self.activePlant.ppm700_max,
                        "pH_min": self.activePlant.pH_min,
-                       "pH_max": self.activePlant.pH_max}  # Define your JSON message
+                       "pH_max": self.activePlant.pH_max,
+                       "daylight": self.activePlant.sun_max}
                 self.arduino.send_to(msg)
             self.save_state()
             self.homeScreen.change_state(self.activePlant)
