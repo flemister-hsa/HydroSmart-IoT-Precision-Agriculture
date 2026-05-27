@@ -41,7 +41,12 @@ void setup(){
     pinMode(PH_PUMP_EN, OUTPUT);
     pinMode(ULTRA_TRIG_PIN, OUTPUT);
     pinMode(ULTRA_ECHO_PIN, INPUT);
-    
+
+    digitalWrite(PH_PUMP_DIR, LOW);
+    digitalWrite(NUTRI_PUMP_DIR, LOW);
+    digitalWrite(NUTRI_PUMP_EN, HIGH);
+    digitalWrite(PH_PUMP_EN, HIGH);
+
     cli();
     TCCR4A = 0;
     TCCR4B = 0;
@@ -51,9 +56,6 @@ void setup(){
     TCCR4B |= (1 << CS11);
     TIMSK4 |= (1 << OCIE4A);
     sei();
-
-    digitalWrite(PH_PUMP_DIR, LOW);
-    digitalWrite(NUTRI_PUMP_DIR, LOW);
 }
 
 ISR(TIMER4_COMPA_vect) {
@@ -77,8 +79,8 @@ void loop(){
             else if (incoming["cmd"] == "water_pump") {digitalWrite(WATER_PUMP_PIN, value);}
             else if (incoming["cmd"] == "plant_pump") {digitalWrite(PLANT_PUMP_PIN, value);}
             else if (incoming["cmd"] == "mixer_motor") {digitalWrite(MIXER_PIN, value);}
-            else if (incoming["cmd"] == "ph_pump") {digitalWrite(PH_PUMP_EN, value);}
-            else if (incoming["cmd"] == "nutrient_pump") {digitalWrite(NUTRI_PUMP_EN, value);}
+            else if (incoming["cmd"] == "ph_pump") {digitalWrite(PH_PUMP_EN, !value);}
+            else if (incoming["cmd"] == "nutrient_pump") {digitalWrite(NUTRI_PUMP_EN, !value);}
             else if (incoming["cmd"] == "run_program") {
                 // Here is where we run a program
                 return;
